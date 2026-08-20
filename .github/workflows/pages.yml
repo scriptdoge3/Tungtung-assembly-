@@ -1,0 +1,57 @@
+name: deploy-pages
+
+# GitHub Pages cannot run a server, so we do the next best thing:
+# build the x86-64 assembly server, run it, make real HTTP requests
+# to it, and publish its captured responses as the Pages site.
+
+on:
+  push:
+    branches: [claude/x86-64-assembly-website-e6c5y3]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Assemble and link the server
+        run: ./build.sh
+
+      - name: Run the assembly server and capture its HTTP responses
+        run: |
+          ./server &
+          sleep 1
+          mkdir site
+          curl -sf http://127.0.0.1:8080/      -o site/index.txt
+          curl -sf http://127.0.0.1:8080/about -o site/about.txt
+          curl -sf http://127.0.0.1:8080/how   -o site/how.txt
+          curl -s  http://127.0.0.1:8080/definitely-not-a-page -o site/404.txt
+          touch site/.nojekyll
+          kill %1
+
+      - name: Configure Pages
+        uses: actions/configure-pages@v5
+        with:
+          enablement: true
+
+      - name: Upload site
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

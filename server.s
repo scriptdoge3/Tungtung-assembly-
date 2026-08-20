@@ -21,6 +21,7 @@
 .set SYS_listen,      50
 .set SYS_setsockopt,  54
 .set SYS_exit,        60
+.set SYS_time,        201
 
 .set AF_INET,         2
 .set SOCK_STREAM,     1
@@ -82,6 +83,7 @@ hdr_tail:
 path_root:   .asciz "/"
 path_about:  .asciz "/about"
 path_how:    .asciz "/how"
+path_stats:  .asciz "/stats"
 
 # --- the entire website, as .ascii string data in .rodata --------------------
 index_body:
@@ -118,7 +120,8 @@ index_body:
     .ascii "    /            you are here\n"
     .ascii "    /about       what this project is\n"
     .ascii "    /how         the life of a request, syscall by syscall\n"
-    .ascii "    /anything    a hand-rolled 404\n"
+    .ascii "    /stats       live numbers, computed at request time\n"
+    .ascii "    /anything    a hand-rolled 404 that echoes your path back\n"
     .ascii "\n"
     .ascii "-----------------------------------------------------------------------------\n"
     .ascii " THE ENTIRE STACK\n"
@@ -143,10 +146,34 @@ index_body:
     .ascii "           v\n"
     .ascii "     the Linux kernel. that's it. there is nothing else.\n"
     .ascii "\n"
+.set index_len, . - index_body
+
+# dynamic footer for the home page, assembled into bodybuf per request
+idx_dyn1:
+    .ascii "-----------------------------------------------------------------------------\n"
+    .ascii " GENERATED ON THE SPOT, JUST FOR YOU\n"
+    .ascii "-----------------------------------------------------------------------------\n"
+    .ascii "\n"
+    .ascii "    this response was not pre-baked. the numbers below were computed\n"
+    .ascii "    in registers the moment your request arrived:\n"
+    .ascii "\n"
+    .ascii "    you are request number ....... "
+.set idx_dyn1_len, . - idx_dyn1
+idx_dyn2:
+    .ascii "\n    seconds since server boot .... "
+.set idx_dyn2_len, . - idx_dyn2
+idx_dyn3:
+    .ascii "\n"
+    .ascii "\n"
+    .ascii "    (refresh: the number goes up. no javascript did that.)\n"
+    .ascii "\n"
+.set idx_dyn3_len, . - idx_dyn3
+
+tail_banner:
     .ascii "=============================================================================\n"
     .ascii "  tungtung-asm-httpd -- zero markup, zero scripts, one hundred percent mov\n"
     .ascii "=============================================================================\n"
-.set index_len, . - index_body
+.set tail_banner_len, . - tail_banner
 
 about_body:
     .ascii "=============================================================================\n"
@@ -243,7 +270,10 @@ how_body:
     .ascii "      c) \"\\r\\nConnection: close\\r\\n\\r\\n\"\n"
     .ascii "      d) the body itself. the pages are not files at all: they are\n"
     .ascii "         .ascii string data inside server.s, assembled straight\n"
-    .ascii "         into the binary's .rodata section\n"
+    .ascii "         into the binary's .rodata section. and parts of it are\n"
+    .ascii "         generated on the spot, per request: the home page footer,\n"
+    .ascii "         all of /stats, and the 404's echo of your path are built\n"
+    .ascii "         into a buffer with rep movsb the moment you ask\n"
     .ascii "\n"
     .ascii "    Every piece is pushed through a loop around sendto(2) with\n"
     .ascii "    MSG_NOSIGNAL, so short writes resume and a client that hangs up\n"
@@ -281,15 +311,51 @@ body404:
     .ascii "        call streq      ; \"/\"      ? no\n"
     .ascii "        call streq      ; \"/about\" ? no\n"
     .ascii "        call streq      ; \"/how\"   ? no\n"
+    .ascii "        call streq      ; \"/stats\" ? no\n"
     .ascii "        ; fall through to you, right here\n"
-    .ascii "\n"
-    .ascii " back to safety: /\n"
-    .ascii "=============================================================================\n"
 .set body404_len, . - body404
+
+# the 404 echoes the requested path back, appended at request time
+b404_path:
+    .ascii "\n the path your browser asked for:  "
+.set b404_path_len, . - b404_path
+b404_tail:
+    .ascii "\n\n back to safety: /\n"
+    .ascii "=============================================================================\n"
+.set b404_tail_len, . - b404_tail
 
 body405:
     .ascii "405 Method Not Allowed\n\nThis server only speaks GET.\n"
 .set body405_len, . - body405
+
+# --- /stats: a fully request-time-generated page -----------------------------
+st1:
+    .ascii "=============================================================================\n"
+    .ascii "  STATS                                    generated the moment you asked\n"
+    .ascii "=============================================================================\n"
+    .ascii "\n"
+    .ascii " every number on this page was computed at request time, in registers,\n"
+    .ascii " by a freestanding binary with no libc:\n"
+    .ascii "\n"
+    .ascii "    requests served since boot ....... "
+.set st1_len, . - st1
+st2:
+    .ascii "\n    seconds since boot ............... "
+.set st2_len, . - st2
+st3:
+    .ascii "\n    unix time right now .............. "
+.set st3_len, . - st3
+st4:
+    .ascii "\n"
+    .ascii "\n"
+    .ascii " the machinery: one inc instruction for the counter, the time(2)\n"
+    .ascii " syscall for the clocks, and a hand-written div-by-10 loop to turn\n"
+    .ascii " the numbers into these very digits.\n"
+    .ascii "\n"
+    .ascii "-----------------------------------------------------------------------------\n"
+    .ascii "  <- back home: /\n"
+    .ascii "=============================================================================\n"
+.set st4_len, . - st4
 
 # -------------------------------------------------------------------- bss ---
 .section .bss
@@ -297,6 +363,12 @@ reqbuf:
     .skip REQBUF_SIZE
 itoa_buf:
     .skip 24
+bodybuf:                         # dynamic responses are assembled here
+    .skip 8192
+hits:                            # requests served since boot
+    .skip 8
+boot_time:                       # unix time at startup
+    .skip 8
 
 # ------------------------------------------------------------------- code ---
 .section .text
@@ -336,6 +408,10 @@ _start:
     mov  esi, BACKLOG
     syscall
 
+    # boot_time = time(NULL)
+    call now
+    mov  [rip + boot_time], rax
+
     # write(1, banner, banner_len)
     mov  eax, SYS_write
     mov  edi, 1
@@ -363,6 +439,7 @@ accept_loop:
     test rax, rax
     jle  close_client
     mov  byte ptr [rsi + rax], 0 # NUL-terminate the raw request
+    inc  qword ptr [rip + hits]
 
     # request must start with "GET "
     cmp  dword ptr [rsi], 0x20544547
@@ -405,18 +482,96 @@ route:
     test al, al
     jnz  serve_how
 
-    # no route matched -> 404
+    mov  rdi, rbx
+    lea  rsi, [rip + path_stats]
+    call streq
+    test al, al
+    jnz  serve_stats
+
+    # no route matched -> 404, generated on the spot: echo the path back.
+    # rbx still points at the NUL-terminated path inside reqbuf.
+    lea  rdi, [rip + bodybuf]
+    lea  rsi, [rip + body404]
+    mov  rdx, OFFSET body404_len
+    call append
+    lea  rsi, [rip + b404_path]
+    mov  rdx, OFFSET b404_path_len
+    call append
+    mov  rsi, rbx                # strlen(path)
+    xor  edx, edx
+1:  cmp  byte ptr [rsi + rdx], 0
+    je   2f
+    inc  rdx
+    jmp  1b
+2:  call append                  # copy the path itself into the page
+    lea  rsi, [rip + b404_tail]
+    mov  rdx, OFFSET b404_tail_len
+    call append
     lea  r14, [rip + hdr404]
     mov  r15, OFFSET hdr404_len
-    lea  rbx, [rip + body404]
-    mov  rbp, OFFSET body404_len
-    jmp  do_respond
+    jmp  finish_dynamic
 
 serve_index:
+    # home page = static art + a footer computed at request time
+    lea  rdi, [rip + bodybuf]
+    lea  rsi, [rip + index_body]
+    mov  rdx, OFFSET index_len
+    call append
+    lea  rsi, [rip + idx_dyn1]
+    mov  rdx, OFFSET idx_dyn1_len
+    call append
+    mov  rax, [rip + hits]
+    call append_num
+    lea  rsi, [rip + idx_dyn2]
+    mov  rdx, OFFSET idx_dyn2_len
+    call append
+    push rdi
+    call now
+    pop  rdi
+    sub  rax, [rip + boot_time]
+    call append_num
+    lea  rsi, [rip + idx_dyn3]
+    mov  rdx, OFFSET idx_dyn3_len
+    call append
+    lea  rsi, [rip + tail_banner]
+    mov  rdx, OFFSET tail_banner_len
+    call append
     lea  r14, [rip + hdr200]
     mov  r15, OFFSET hdr200_len
-    lea  rbx, [rip + index_body]
-    mov  rbp, OFFSET index_len
+    jmp  finish_dynamic
+
+serve_stats:
+    # every number on this page is computed right now
+    lea  rdi, [rip + bodybuf]
+    lea  rsi, [rip + st1]
+    mov  rdx, OFFSET st1_len
+    call append
+    mov  rax, [rip + hits]
+    call append_num
+    lea  rsi, [rip + st2]
+    mov  rdx, OFFSET st2_len
+    call append
+    push rdi
+    call now
+    pop  rdi
+    mov  r8, rax                 # r8 = current unix time
+    sub  rax, [rip + boot_time]
+    call append_num
+    lea  rsi, [rip + st3]
+    mov  rdx, OFFSET st3_len
+    call append
+    mov  rax, r8
+    call append_num
+    lea  rsi, [rip + st4]
+    mov  rdx, OFFSET st4_len
+    call append
+    lea  r14, [rip + hdr200]
+    mov  r15, OFFSET hdr200_len
+
+finish_dynamic:
+    lea  rbx, [rip + bodybuf]    # body = [bodybuf, rdi)
+    mov  rbp, rdi
+    sub  rbp, rbx
     jmp  do_respond
 
 serve_about:
@@ -501,6 +656,33 @@ send_all:
     sub  rdx, rax
     jmp  1b
 2:  ret
+
+# ----------------------------------------------------------------- append ---
+# in:  rdi = dest cursor, rsi = src, rdx = len
+# out: rdi advanced past the copied bytes (rsi advances too)
+append:
+    mov  rcx, rdx
+    rep movsb
+    ret
+
+# ------------------------------------------------------------- append_num ---
+# in:  rdi = dest cursor, rax = unsigned value
+# out: rdi advanced past the decimal digits
+append_num:
+    push rdi
+    call itoa                    # rsi = digits, rdx = count
+    pop  rdi
+    mov  rcx, rdx
+    rep movsb
+    ret
+
+# -------------------------------------------------------------------- now ---
+# out: rax = unix time in seconds
+now:
+    mov  eax, SYS_time
+    xor  edi, edi
+    syscall
+    ret
 
 # ------------------------------------------------------------------- itoa ---
 # in:  rax = unsigned value

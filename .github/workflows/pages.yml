@@ -38,6 +38,7 @@ jobs:
           curl -sf http://127.0.0.1:8080/      -o site/index.txt
           curl -sf http://127.0.0.1:8080/about -o site/about.txt
           curl -sf http://127.0.0.1:8080/how   -o site/how.txt
+          curl -sf http://127.0.0.1:8080/stats -o site/stats.txt
           curl -s  http://127.0.0.1:8080/definitely-not-a-page -o site/404.txt
           touch site/.nojekyll
           kill %1

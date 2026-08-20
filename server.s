@@ -1,7 +1,8 @@
 # Tungtung Assembly Web Server
 #
 # A complete HTTP/1.1 server in pure x86-64 assembly for Linux.
-# No libc, no frameworks, no JS/TS/JSON/CSS anywhere — just raw syscalls.
+# No libc, no frameworks, no HTML/JS/TS/JSON/CSS anywhere — just raw
+# syscalls serving plain text.
 # It opens a TCP socket, accepts connections, parses the HTTP request
 # line by hand, and writes HTTP responses byte by byte.
 #
@@ -54,14 +55,14 @@ errmsg:
 hdr200:
     .ascii "HTTP/1.1 200 OK\r\n"
     .ascii "Server: tungtung-asm\r\n"
-    .ascii "Content-Type: text/html; charset=utf-8\r\n"
+    .ascii "Content-Type: text/plain; charset=utf-8\r\n"
     .ascii "Content-Length: "
 .set hdr200_len, . - hdr200
 
 hdr404:
     .ascii "HTTP/1.1 404 Not Found\r\n"
     .ascii "Server: tungtung-asm\r\n"
-    .ascii "Content-Type: text/html; charset=utf-8\r\n"
+    .ascii "Content-Type: text/plain; charset=utf-8\r\n"
     .ascii "Content-Length: "
 .set hdr404_len, . - hdr404
 
@@ -69,7 +70,7 @@ hdr405:
     .ascii "HTTP/1.1 405 Method Not Allowed\r\n"
     .ascii "Server: tungtung-asm\r\n"
     .ascii "Allow: GET\r\n"
-    .ascii "Content-Type: text/html; charset=utf-8\r\n"
+    .ascii "Content-Type: text/plain; charset=utf-8\r\n"
     .ascii "Content-Length: "
 .set hdr405_len, . - hdr405
 
@@ -79,27 +80,24 @@ hdr_tail:
 
 # --- routes ------------------------------------------------------------------
 path_root:   .asciz "/"
-path_index:  .asciz "/index.html"
 path_about:  .asciz "/about"
 path_how:    .asciz "/how"
 
 # --- page bodies, baked straight into the binary -----------------------------
-index_body:  .incbin "www/index.html"
+index_body:  .incbin "www/index.txt"
 .set index_len, . - index_body
 
-about_body:  .incbin "www/about.html"
+about_body:  .incbin "www/about.txt"
 .set about_len, . - about_body
 
-how_body:    .incbin "www/how.html"
+how_body:    .incbin "www/how.txt"
 .set how_len, . - how_body
 
-body404:     .incbin "www/404.html"
+body404:     .incbin "www/404.txt"
 .set body404_len, . - body404
 
 body405:
-    .ascii "<!doctype html><html><head><title>405</title></head>"
-    .ascii "<body><h1>405 Method Not Allowed</h1>"
-    .ascii "<p>This server only speaks GET.</p></body></html>"
+    .ascii "405 Method Not Allowed\n\nThis server only speaks GET.\n"
 .set body405_len, . - body405
 
 # -------------------------------------------------------------------- bss ---
@@ -200,12 +198,6 @@ cut_path:
 route:
     mov  rdi, rbx
     lea  rsi, [rip + path_root]
-    call streq
-    test al, al
-    jnz  serve_index
-
-    mov  rdi, rbx
-    lea  rsi, [rip + path_index]
     call streq
     test al, al
     jnz  serve_index

@@ -1,0 +1,21 @@
+=============================================================================
+
+      _  _    ___  _  _
+     | || |  / _ \| || |
+     | || |_| | | | || |_
+     |__   _| |_| |__   _|      N O T   F O U N D
+        |_|  \___/   |_|
+
+=============================================================================
+
+ These bytes were compared, one by one, in a register --
+ and none of the routes matched.
+
+    route:
+        call streq      ; "/"      ? no
+        call streq      ; "/about" ? no
+        call streq      ; "/how"   ? no
+        ; fall through to you, right here
+
+ back to safety: /
+=============================================================================

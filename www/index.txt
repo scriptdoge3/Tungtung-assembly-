@@ -1,0 +1,61 @@
+=============================================================================
+
+  _____ _   _ _   _  ____ _____ _   _ _   _  ____
+ |_   _| | | | \ | |/ ___|_   _| | | | \ | |/ ___|
+   | | | | | |  \| | |  _  | | | | | |  \| | |  _
+   | | | |_| | |\  | |_| | | | | |_| | |\  | |_| |
+   |_|  \___/|_| \_|\____| |_|  \___/|_| \_|\____|
+
+                          A S S E M B L Y
+
+=============================================================================
+
+ You are looking at a website served over real HTTP by a server written
+ ENTIRELY in x86-64 assembly.
+
+ There is:
+
+    [x] no HTML        (this is text/plain, straight from the socket)
+    [x] no CSS         (what you see is what there is)
+    [x] no JavaScript  (view-source and weep: it's identical)
+    [x] no TypeScript
+    [x] no JSON
+    [x] no HTTP library, no framework, no libc
+
+ Just raw Linux syscalls, hand-parsed requests, hand-written responses.
+
+-----------------------------------------------------------------------------
+ NAVIGATION (type it in the address bar, or curl it)
+-----------------------------------------------------------------------------
+
+    /            you are here
+    /about       what this project is
+    /how         the life of a request, syscall by syscall
+    /anything    a hand-rolled 404
+
+-----------------------------------------------------------------------------
+ THE ENTIRE STACK
+-----------------------------------------------------------------------------
+
+     your browser (or curl)
+           |
+           |  TCP :8080
+           v
+     +------------------+
+     |  server  (ELF)   |    a tiny static binary
+     |                  |
+     |   socket(2)      |
+     |   bind(2)        |
+     |   listen(2)      |
+     |   accept(2)      |
+     |   read(2)        |  <- parses "GET /path HTTP/1.1" by hand
+     |   sendto(2)      |  <- writes status line, headers, body by hand
+     |   close(2)       |
+     +------------------+
+           |
+           v
+     the Linux kernel. that's it. there is nothing else.
+
+=============================================================================
+  tungtung-asm-httpd -- zero markup, zero scripts, one hundred percent mov
+=============================================================================

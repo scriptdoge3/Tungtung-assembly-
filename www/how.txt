@@ -1,0 +1,66 @@
+=============================================================================
+  HOW IT WORKS                                           tungtung-asm-httpd
+=============================================================================
+
+ The whole server is one loop of raw Linux syscalls.
+ Here is the life of a request:
+
+ 1. BOOT
+ -------
+    socket(AF_INET, SOCK_STREAM, 0)          ; get a TCP socket
+    setsockopt(fd, SOL_SOCKET, SO_REUSEADDR) ; allow fast restarts
+    bind(fd, {AF_INET, port 8080, 0.0.0.0})  ; claim the port
+    listen(fd, 16)                           ; start accepting
+
+    The port lives in the binary as two literal bytes, because the
+    kernel wants it in network byte order:
+
+       sockaddr:
+           .word  AF_INET
+           .byte  0x1f, 0x90        ; 0x1F90 = 8080, big-endian
+           .long  0                 ; INADDR_ANY
+
+ 2. RECEIVE THE HTTP REQUEST
+ ---------------------------
+    accept(2) hands over a client socket, read(2) pulls in the raw
+    bytes. The method check is a single 4-byte compare -- the string
+    "GET " is the little-endian dword 0x20544547:
+
+       cmp  dword ptr [rsi], 0x20544547   ; "GET " ?
+       jne  send_405
+
+    Then a byte-by-byte scan slices the path out of
+    "GET /path HTTP/1.1" by overwriting the first space with a NUL.
+
+ 3. ROUTE
+ --------
+    The path is compared against "/", "/about" and "/how" with a tiny
+    hand-written string compare. Anything else falls through to 404.
+
+ 4. SEND THE HTTP RESPONSE
+ -------------------------
+    The response goes out manually, in four pieces:
+
+      a) a header prefix ending in "Content-Length: "
+      b) the body length, converted to decimal digits by a hand-
+         written itoa (repeated div 10, digits filled right to left)
+      c) "\r\nConnection: close\r\n\r\n"
+      d) the body itself, embedded in the binary at build time by
+         the assembler directive:  .incbin "www/index.txt"
+
+    Every piece is pushed through a loop around sendto(2) with
+    MSG_NOSIGNAL, so short writes resume and a client that hangs up
+    early cannot kill the server with SIGPIPE.
+
+ 5. REPEAT
+ ---------
+       close(client)
+       jmp  accept_loop
+
+    That is the entire request lifecycle. No allocator, no threads,
+    no event loop -- the server never even calls mmap or brk.
+    All memory is static.
+
+-----------------------------------------------------------------------------
+  <- back home: /          about: /about
+=============================================================================

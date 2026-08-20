@@ -5,7 +5,6 @@ RUN apt-get update \
  && rm -rf /var/lib/apt/lists/*
 WORKDIR /src
 COPY build.sh server.s ./
-COPY www ./www
 RUN ./build.sh
 
 # Stage 2: ship the bare static binary — no OS, no shell, no libc, nothing

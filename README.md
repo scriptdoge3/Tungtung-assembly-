@@ -6,14 +6,15 @@ written entirely in **pure x86-64 assembly** for Linux — it talks to the
 kernel directly through raw syscalls, parses HTTP requests by hand, and
 writes HTTP responses byte by byte. There is no libc; the binary is
 freestanding and static. Pages are served as `text/plain` ASCII art,
-which every browser renders as-is.
+which every browser renders as-is — and the pages themselves live inside
+`server.s` as `.ascii` string data, so the entire website is one assembly
+file.
 
 ## Files
 
 | File | What it is |
 |---|---|
-| `server.s` | The entire server: sockets, HTTP parsing, routing, responses |
-| `www/*.txt` | The pages (plain text + ASCII art), baked in via `.incbin` |
+| `server.s` | Everything: sockets, HTTP parsing, routing, and the pages themselves as `.ascii` data |
 | `build.sh` | Runs `as` + `ld`. That's the whole build system |
 
 ## Build and run
@@ -61,8 +62,9 @@ and run it.
    hand-written string compare routes it to a page.
 4. The response is sent manually: status line + headers, a `Content-Length`
    value produced by a hand-written `itoa` (repeated `div 10`), then the
-   plain-text body — all through a `sendto(2)` loop with `MSG_NOSIGNAL` so
-   short writes resume and dead clients can't SIGPIPE the server.
+   plain-text body straight out of the binary's `.rodata` — all through a
+   `sendto(2)` loop with `MSG_NOSIGNAL` so short writes resume and dead
+   clients can't SIGPIPE the server.
 5. `close(2)`, jump back to `accept`, forever.
 
 Ten syscalls total. No allocator, no threads, no event-loop library —

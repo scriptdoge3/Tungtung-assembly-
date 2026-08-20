@@ -29,6 +29,28 @@ Then open <http://localhost:8080> (or `curl` it). Routes: `/`, `/about`,
 `/how`, plus a hand-rolled 404 for everything else and a 405 for non-GET
 methods.
 
+## Deploy
+
+The repo ships a two-stage `Dockerfile` whose final image is built `FROM
+scratch` and contains **only the ~18 KB static binary** — the whole image is
+under 19 kB. Anything that runs containers can host it:
+
+```sh
+docker build -t tungtung-asm .
+docker run -p 8080:8080 tungtung-asm
+```
+
+**Fly.io** (free allowance is plenty; `fly.toml` is included):
+
+```sh
+flyctl launch --copy-config --now
+```
+
+Fly terminates HTTPS at its edge and forwards plain HTTP to port 8080, so
+the assembly server needs no TLS of its own. Any VPS works too — the binary
+is fully static, so you can literally `scp server` to an x86-64 Linux box
+and run it.
+
 ## How it works
 
 1. `socket(2)` / `setsockopt(2)` / `bind(2)` / `listen(2)` set up TCP on

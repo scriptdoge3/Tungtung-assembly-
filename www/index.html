@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Tungtung Assembly</title>
+</head>
+<body>
+<h1>Tungtung Assembly</h1>
+<p><strong>This page was served by a web server written entirely in x86-64 assembly.</strong></p>
+<p>No HTTP library. No JSON. No JavaScript. No TypeScript. No CSS.
+Just raw Linux syscalls, hand-parsed HTTP requests, and hand-written HTTP responses.</p>
+<hr>
+<h2>Pages</h2>
+<ul>
+<li><a href="/about">About this project</a></li>
+<li><a href="/how">How the server works</a></li>
+<li><a href="/definitely-not-a-page">A page that does not exist (hand-rolled 404)</a></li>
+</ul>
+<hr>
+<h2>The entire stack</h2>
+<pre>
+ your browser
+      |
+      |  TCP :8080
+      v
++-----------------+
+|  server  (ELF)  |   ~9 KB static binary
+|                 |
+|  socket(2)      |
+|  bind(2)        |
+|  listen(2)      |
+|  accept(2)      |
+|  read(2)        |   <- parses "GET /path HTTP/1.1" by hand
+|  sendto(2)      |   <- writes status line, headers, body by hand
+|  close(2)       |
++-----------------+
+      |
+      v
+  the Linux kernel. that's it. there is nothing else.
+</pre>
+<hr>
+<p><em>tungtung-asm-httpd &mdash; zero dependencies, zero bytes of JavaScript</em></p>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>How it works - Tungtung Assembly</title>
+</head>
+<body>
+<h1>How the server works</h1>
+<p>The whole server is one loop of raw Linux syscalls. Here is the life of a request:</p>
+<h2>1. Boot</h2>
+<pre>
+socket(AF_INET, SOCK_STREAM, 0)          ; get a TCP socket
+setsockopt(fd, SOL_SOCKET, SO_REUSEADDR) ; allow fast restarts
+bind(fd, {AF_INET, port 8080, 0.0.0.0})  ; claim the port
+listen(fd, 16)                           ; start accepting
+</pre>
+<p>The port lives in the binary as two literal bytes, because the kernel
+wants it in network byte order:</p>
+<pre>
+sockaddr:
+    .word  AF_INET
+    .byte  0x1f, 0x90        ; 0x1F90 = 8080, big-endian
+    .long  0                 ; INADDR_ANY
+</pre>
+<h2>2. Receive the HTTP request</h2>
+<p><code>accept(2)</code> gives us a client socket, <code>read(2)</code> gives us the raw
+bytes of the request. The method check is a single 4-byte compare &mdash;
+the string <code>"GET "</code> is the little-endian dword <code>0x20544547</code>:</p>
+<pre>
+cmp  dword ptr [rsi], 0x20544547   ; "GET " ?
+jne  send_405
+</pre>
+<p>Then a byte-by-byte scan slices the path out of
+<code>GET /path HTTP/1.1</code> by overwriting the first space with a NUL.</p>
+<h2>3. Route</h2>
+<p>The path is compared against <code>/</code>, <code>/index.html</code>,
+<code>/about</code> and <code>/how</code> with a tiny hand-written string compare.
+Anything else falls through to the 404 page.</p>
+<h2>4. Send the HTTP response</h2>
+<p>The response is written manually in four pieces:</p>
+<ol>
+<li>a header prefix ending in <code>Content-Length: </code></li>
+<li>the body length, converted to decimal digits by a hand-written
+<code>itoa</code> (repeated <code>div 10</code>, digits filled right to left)</li>
+<li><code>\r\nConnection: close\r\n\r\n</code></li>
+<li>the HTML body itself, which was embedded into the binary at build
+time with the assembler directive <code>.incbin "www/index.html"</code></li>
+</ol>
+<p>Every piece goes out through a loop around <code>sendto(2)</code> with
+<code>MSG_NOSIGNAL</code>, so short writes are resumed and a client that
+hangs up early cannot kill the server with SIGPIPE.</p>
+<h2>5. Repeat</h2>
+<pre>
+close(client)
+jmp accept_loop
+</pre>
+<p>That is the entire request lifecycle. No framework, no event loop
+library, no allocator &mdash; the server never even calls
+<code>mmap</code> or <code>brk</code>. All memory is static.</p>
+<hr>
+<p><a href="/">&larr; back home</a> &middot; <a href="/about">about &rarr;</a></p>
+</body>
+</html>

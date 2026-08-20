@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>About - Tungtung Assembly</title>
+</head>
+<body>
+<h1>About</h1>
+<p>Tungtung Assembly is an experiment in radical minimalism:
+a website with <strong>no runtime dependencies at all</strong>.</p>
+<h2>What is NOT here</h2>
+<ul>
+<li>No JavaScript or TypeScript &mdash; not one byte</li>
+<li>No CSS &mdash; your browser's default styles are doing all the work</li>
+<li>No JSON &mdash; the only data format is HTML itself</li>
+<li>No HTTP library or web framework &mdash; requests are parsed with byte
+compares and responses are assembled with <code>sendto(2)</code> calls</li>
+<li>No libc &mdash; the binary is freestanding and talks to the kernel directly</li>
+</ul>
+<h2>What IS here</h2>
+<ul>
+<li>One assembly source file: <code>server.s</code></li>
+<li>Four HTML files, baked into the binary at build time with <code>.incbin</code></li>
+<li>A shell script that runs <code>as</code> and <code>ld</code></li>
+</ul>
+<h2>Numbers</h2>
+<table border="1">
+<tr><th>Thing</th><th>Count</th></tr>
+<tr><td>Lines of JavaScript</td><td>0</td></tr>
+<tr><td>Lines of CSS</td><td>0</td></tr>
+<tr><td>npm dependencies</td><td>0</td></tr>
+<tr><td>Syscalls used</td><td>10</td></tr>
+<tr><td>Binary size</td><td>about 9 KB, HTML included</td></tr>
+</table>
+<hr>
+<p><a href="/">&larr; back home</a> &middot; <a href="/how">how it works &rarr;</a></p>
+</body>
+</html>
